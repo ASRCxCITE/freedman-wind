@@ -37,7 +37,7 @@ counties={
 }
 
 #-- global variables --#
-shp=shpreader.Reader('/network/rit/lab/schiraldilab/shapefiles/us_county/tl_2018_us_county')
+shp=shpreader.Reader('assets/tl_2018_us_county')
 polys={}
 for r in shp.records():
     if r.attributes['STATEFP'] =='36' and r.attributes['COUNTYFP'] in counties.keys():
@@ -544,4 +544,4 @@ def rasterize(poly, lat_coord, long_coord, fill=np.nan, **kwargs):
     return xr.DataArray(raster, coords=(lat_coord,long_coord), dims=('south_north', 'west_east'))
 
 if __name__=='__main__':
-    app.run_server()
+    app.run_server(port=3000)

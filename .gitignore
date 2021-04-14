@@ -1,2 +1,5 @@
 app/__pycache__/*
-app/netcdf/*
+app/netcdf/**/*
+app/assets/*
+app/.ipynb_checkpoints/*
+.ipynb_checkpoints/*

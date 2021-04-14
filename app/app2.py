@@ -39,7 +39,7 @@ ZOOM=7
 CENTER_LAT=41.019801
 CENTER_LONG=-73.723068
 # -- global variables --#
-shp = shpreader.Reader("/network/rit/lab/schiraldilab/shapefiles/us_county/tl_2018_us_county")
+shp = shpreader.Reader("assets/tl_2018_us_county")
 polys = {}
 for r in shp.records():
     if r.attributes["STATEFP"] == "36" and r.attributes["COUNTYFP"] in counties.keys():
@@ -174,11 +174,11 @@ app.title = "ConEd WindView"
 server = app.server
 
 # Define callback functions
-@app.callback(
-    [Output("wind-data", "data"), Output("fdate", "marks")],
-    [Input("selected-date", "date")],
-    [State("wind-data", "data")],
-)
+# @app.callback(
+#     [Output("wind-data", "data"), Output("fdate", "marks")],
+#     [Input("selected-date", "date")],
+#     [State("wind-data", "data")],
+# )
 def load_data(date, data):
 
     print("Loading Data for {0}".format(str(date)))
@@ -212,15 +212,15 @@ def load_data(date, data):
     )
 
 
-@app.callback(
-    Output("line-plot", "figure"),
-    [
-        Input("wind-data", "data"),
-        Input("geoanimation", "selectedData"),
-        Input("button", "n_clicks"),
-    ],
-    [State("fdate", "value")],
-)
+# @app.callback(
+#     Output("line-plot", "figure"),
+#     [
+#         Input("wind-data", "data"),
+#         Input("geoanimation", "selectedData"),
+#         Input("button", "n_clicks"),
+#     ],
+#     [State("fdate", "value")],
+# )
 def plot_line(data, points, n, dateind):
 
     if points and data and dateind:
@@ -272,15 +272,15 @@ def plot_line(data, points, n, dateind):
         return dict(data=[], layout=layout)
 
 
-@app.callback(
-    Output("geoanimation", "figure"),
-    [
-        Input("selected-date", "date"),
-        Input("wind-data", "data"),
-        Input("button", "n_clicks"),
-    ],
-    [State("fdate", "value"), State("geoanimation", "selectedData")],
-)
+# @app.callback(
+#     Output("geoanimation", "figure"),
+#     [
+#         Input("selected-date", "date"),
+#         Input("wind-data", "data"),
+#         Input("button", "n_clicks"),
+#     ],
+#     [State("fdate", "value"), State("geoanimation", "selectedData")],
+# )
 def plot_geo_animation(date, data, n, dateind, points):
 
     geo_layout = dict(
@@ -481,4 +481,4 @@ def rasterize(poly, lat_coord, long_coord, fill=np.nan, **kwargs):
 
 
 if __name__ == "__main__":
-    app.run_server()
+    app.run_server(port=3000,debug=True)
