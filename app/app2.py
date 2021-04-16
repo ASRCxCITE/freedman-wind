@@ -63,7 +63,8 @@ body = dbc.Container(
             [
                 dbc.Row(
                     [
-                        html.H3("Forecast as of "+str(dt.datetime.today().strftime("%b %d, %Y %H:%M"))),
+                        html.H3(id="main-header",children=["init"]),
+#                         html.H3("Forecast as of "+str(dt.datetime.today().strftime("%b %d, %Y %H:%M"))),
                     ],
                     className="p-2",
                 ),
@@ -79,7 +80,7 @@ body = dbc.Container(
                         dbc.Col([
                             dbc.Row([
                                 dcc.RadioItems(
-                                    id="selected-hours1",
+                                    id="selected-hours",
                                     options=[{'label':'All (120)','value':0},
                                              {'label':'Every 3','value':1},
                                              {'label':'Every 6','value':2},
@@ -93,7 +94,7 @@ body = dbc.Container(
                             dbc.Row([
                                 html.Div([
                                     dcc.Checklist(
-                                        id="selected-hours2",
+                                        id="custom-hours",
                                         options=[{'label':k+1,'value':k+1} for k in range(120)],
                                         value=[1,10],
                                         labelStyle={"vertical-align":"middle"},
@@ -101,8 +102,8 @@ body = dbc.Container(
                                                "flex-wrap":"wrap", 
                                                "justify-content":"space-between"}
                                     ),
-                                ],style={'marginLeft':5,'width':'50%',
-                                         'max-height':'100px','overflow':'scroll'})
+                                ],id="custom-hours-div",
+                                    style={})
                             ],style={},justify='center'),  
                         ],style={},align='left'),
                     ],style={'width':'100%'},
@@ -110,7 +111,7 @@ body = dbc.Container(
                 # dbc.Progress(id="progress",value="0",animated=True),
                 dcc.Loading(
                     id="data-loading",
-                    children=[dcc.Store(id="wind-data")],
+                    children=[dcc.Store(id="wind-data"),dcc.Store(id="geojson-data"),dcc.Store(id="geojson-annot")],
                     fullscreen=True,
                 ),
                 dbc.Row(
@@ -215,12 +216,14 @@ server = app.server
 
 # Define callback functions
 @app.callback(
-    [Output("wind-data", "data"), Output("fdate", "marks")],
+    [Output("wind-data", "data"), Output("fdate", "marks"), 
+     Output("main-header","children"), Output("geojson-data","data"), Output("geojson-annot","data")],
     [Input("hour-button", "n_clicks")],
-    [State("selected-hours1","value")],
-    [State("wind-data", "data")],
+    [State("selected-hours","value"),State("wind-data", "data"),
+     State("geojson-data","data"),State("geojson-annot","data")
+    ],
 )
-def load_data(click, hours, data):
+def load_data(click, hours, data, geojson, annot):
 
     print("Loading Data",click,hours)
     hour_button_click = click
@@ -228,18 +231,30 @@ def load_data(click, hours, data):
     res = response.json()
     with open(res['filename'],'r') as f:
         json_data = json.load(f)
+#         print(json_data['geojson'])
 
         return (
             json_data['gust'],
-            json_data['marks']
+            json_data['marks'],
+            html.H3("Forecast as of "+str(pd.to_datetime(json_data['time'],unit='s').strftime("%b %d, %Y %H:%M"))),
+            json_data['geojson'],
+            json_data['data']
         )
     
-@app.callback(Output('selected-hours2', 'labelStyle'),
-              Input('selected-hours1', 'value'))
+@app.callback(
+    [
+        Output('custom-hours', 'labelStyle'),
+        Output('custom-hours-div','style')
+    ],
+    Input('selected-hours', 'value')
+)
 def forecast_hours(value):
     if value == 4:
-        return {'display':'inline-block'}
-    else: return {'display':'none'}
+        return [{"display":"inline-block", "flex-wrap":"wrap", "justify-content":"space-between"},
+                {'marginLeft':5,'width':'50%','padding':5,'max-height':'100px',
+                 'overflow':'scroll',"border":"1px white solid"}]
+    else: return [{"display":"none"},
+                  {"border":"0px white solid"}]
 
 @app.callback(
     Output("line-plot", "figure"),
@@ -306,128 +321,136 @@ def plot_line(data, points, n, dateind):
 @app.callback(
     Output("geoanimation", "figure"),
     [
-#         Input("selected-date", "date"),
+        Input("geojson-data", "data"),
+        Input("geojson-annot","data"),
         Input("wind-data", "data"),
         Input("button", "n_clicks"),
     ],
     [State("fdate", "value"), State("geoanimation", "selectedData")],
 )
-def plot_geo_animation(data, n, dateind, points):
+def plot_geo_animation(geo_layout, annot, data, n, dateind, points):
+    
+    
+    
+    # Set up Colors
+#     bins = np.arange(0, 61, 5)
+#     norm = mplcol.Normalize(bins[0], bins[-1])
+#     colors = cm.viridis(norm(bins))
 
-    geo_layout = dict(
-        mapbox=dict(
-            accesstoken=mapbox_token,
-            center=dict(lon=CENTER_LONG, lat=CENTER_LAT),
-            zoom=ZOOM,
-            style="dark",
-            layers=[],
-        ),
-        plot_bgcolor="#303030",
-        paper_bgcolor="#303030",
-        margin=dict(l=0, r=0, t=0, b=0),
-        dragmode="select",
-    )
+#     geo_layout = dict(
+#         mapbox=dict(
+#             accesstoken=mapbox_token,
+#             center=dict(lon=CENTER_LONG, lat=CENTER_LAT),
+#             zoom=ZOOM,
+#             style="dark",
+#             layers=[],
+#         ),
+#         plot_bgcolor="#303030",
+#         paper_bgcolor="#303030",
+#         margin=dict(l=0, r=0, t=0, b=0),
+#         dragmode="select",
+#     )
 
     if data and dateind:
-        # data to xarray
-        df = (
-            xr.DataArray.from_dict(data)
-            .isel(Time=slice(dateind[0], dateind[-1]))
-            .max("Time")
-            .coarsen(south_north=3, west_east=3, boundary="pad")
-            .max()
-        )
+#         # data to xarray
+#         df = (
+#             xr.DataArray.from_dict(data)
+#             .isel(Time=slice(dateind[0], dateind[-1]))
+#             .max("Time")
+#             .coarsen(south_north=3, west_east=3, boundary="pad")
+#             .max()
+#         )
 
-        # Set up Colors
-        bins = np.arange(0, 61, 5)
-        norm = mplcol.Normalize(bins[0], bins[-1])
-        colors = cm.viridis(norm(bins))
+#         # Set up Colors
+# #         bins = np.arange(0, 61, 5)
+# #         norm = mplcol.Normalize(bins[0], bins[-1])
+# #         colors = cm.viridis(norm(bins))
 
-        annotations = [
-            dict(
-                showarrow=False,
-                # align = 'right',
-                text="<b>MPH</b>",
-                bgcolor="#EFEFEE",
-                x=0.90,
-                y=0.915,
-            )
-        ]
+#         annotations = [
+#             dict(
+#                 showarrow=False,
+#                 # align = 'right',
+#                 text="<b>MPH</b>",
+#                 bgcolor="#EFEFEE",
+#                 x=0.90,
+#                 y=0.915,
+#             )
+#         ]
 
-        for i in range(0, len(colors) - 1):
-            # color = cm[bin]
-            annotations.append(
-                dict(
-                    arrowcolor=mplcol.rgb2hex(colors[i]),
-                    text=("{:1.1f}").format(bins[i]),
-                    height=21,
-                    x=0.95,
-                    y=0.85 - (i / 20),
-                    ax=-55,
-                    ay=0,
-                    arrowwidth=23,
-                    arrowhead=0,
-                    bgcolor="#EFEFEE",
-                )
-            )
+#         for i in range(0, len(colors) - 1):
+#             # color = cm[bin]
+#             annotations.append(
+#                 dict(
+#                     arrowcolor=mplcol.rgb2hex(colors[i]),
+#                     text=("{:1.1f}").format(bins[i]),
+#                     height=21,
+#                     x=0.95,
+#                     y=0.85 - (i / 20),
+#                     ax=-55,
+#                     ay=0,
+#                     arrowwidth=23,
+#                     arrowhead=0,
+#                     bgcolor="#EFEFEE",
+#                 )
+#             )
 
-        geo_layout["annotations"] = annotations
+#         geo_layout["annotations"] = annotations
 
-        # Get the max
-        x, y = np.meshgrid(df.west_east.values, df.south_north.values)
-        gridbox_cind = np.digitize(df.values, bins)
+#         # Get the max
+#         x, y = np.meshgrid(df.west_east.values, df.south_north.values)
+#         gridbox_cind = np.digitize(df.values, bins)
 
-        data = [
-            dict(
-                type="scattermapbox",
-                lon=x.flatten(),
-                lat=y.flatten(),
-                text=["{0:.1f} mph".format(i) for i in df.values.flatten()],
-                hoverinfo="text",
-                mode="none",
-            )
-        ]
+#         data = [
+#             dict(
+#                 type="scattermapbox",
+#                 lon=x.flatten(),
+#                 lat=y.flatten(),
+#                 text=["{0:.1f} mph".format(i) for i in df.values.flatten()],
+#                 hoverinfo="text",
+#                 mode="none",
+#             )
+#         ]
 
-        # set up geosjon
-        geoJSON = [
-            {"type": "FeatureCollection", "features": []} for i in range(len(colors))
-        ]
+#         # set up geosjon
+#         geoJSON = [
+#             {"type": "FeatureCollection", "features": []} for i in range(len(colors))
+#         ]
 
-        # each "color" is its own geojson layer for plotly. Loop of lat/lon and create gridboxes
-        for xi in range(0, df.shape[0] - 1):
-            for yi in range(0, df.shape[1] - 1):
-                colind = gridbox_cind[xi, yi] - 1
+#         # each "color" is its own geojson layer for plotly. Loop of lat/lon and create gridboxes
+#         for xi in range(0, df.shape[0] - 1):
+#             for yi in range(0, df.shape[1] - 1):
+#                 colind = gridbox_cind[xi, yi] - 1
 
-                geoJSON[colind]["features"].append(
-                    {
-                        "type": "Feature",
-                        "properties": {},
-                        "geometry": {
-                            "type": "Polygon",
-                            "coordinates": [
-                                [
-                                    [x[xi, yi], y[xi, yi]],
-                                    [x[xi + 1, yi], y[xi + 1, yi]],
-                                    [x[xi + 1, yi + 1], y[xi + 1, yi + 1]],
-                                    [x[xi, yi + 1], y[xi, yi + 1]],
-                                    [x[xi, yi], y[xi, yi]],
-                                ]
-                            ],
-                        },
-                    }
-                )
+#                 geoJSON[colind]["features"].append(
+#                     {
+#                         "type": "Feature",
+#                         "properties": {},
+#                         "geometry": {
+#                             "type": "Polygon",
+#                             "coordinates": [
+#                                 [
+#                                     [x[xi, yi], y[xi, yi]],
+#                                     [x[xi + 1, yi], y[xi + 1, yi]],
+#                                     [x[xi + 1, yi + 1], y[xi + 1, yi + 1]],
+#                                     [x[xi, yi + 1], y[xi, yi + 1]],
+#                                     [x[xi, yi], y[xi, yi]],
+#                                 ]
+#                             ],
+#                         },
+#                     }
+#                 )
 
-        # loop over # of colors and create a new layer for each
-        for i in range(len(colors)):
-            geoLayer = dict(
-                sourcetype="geojson",
-                source=geoJSON[i],
-                type="fill",
-                color=mplcol.rgb2hex(colors[i]),
-                opacity=0.4,
-                name="{} mph".format(colors[i]),
-            )
-            geo_layout["mapbox"]["layers"].append(geoLayer)
+#         # loop over # of colors and create a new layer for each
+#         for i in range(len(colors)):
+#             geoLayer = dict(
+#                 sourcetype="geojson",
+#                 source=geoJSON[i],
+#                 type="fill",
+#                 color=mplcol.rgb2hex(colors[i]),
+#                 opacity=0.4,
+#                 name="{} mph".format(colors[i]),
+#             )
+#             geo_layout["mapbox"]["layers"].append(geoLayer)
 
         if points:
             poly_box = {
@@ -476,8 +499,9 @@ def plot_geo_animation(data, n, dateind, points):
                     layer="above",
                 )
             )
+            
 
-        return dict(data=data, layout=geo_layout)
+        return dict(data=annot, layout=geo_layout)
     else:
         return dict(data=[], layout=geo_layout)
 
