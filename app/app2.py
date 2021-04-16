@@ -23,6 +23,7 @@ from shapely.geometry import Point
 from rasterio import features
 from affine import Affine
 import requests
+import json
 
 
 # -- Configuration Variables --#
@@ -47,25 +48,64 @@ for r in shp.records():
 
 # power_lines=requests.get('https://opendata.arcgis.com/datasets/70512b03fe994c6393107cc9946e5c22_0.geojson')
 # power_lines=power_lines.json()
+# hour_checklist = [{'label':'All','value':0}]
+# hour_checklist = [{'label':k+1,'value':k+1} for k in range(120)]
+# print(hour_checklist)
+
+                                     
 
 # -- Specify layout components --#
+
+
 body = dbc.Container(
     [
         dbc.Container(
             [
                 dbc.Row(
                     [
-                        html.H2("Initialization Date:"),
-                        dcc.DatePickerSingle(
-                            id="selected-date",
-                            min_date_allowed=dt.datetime(2017, 10, 29),
-                            max_date_allowed=dt.datetime(2017, 10, 29),
-                            initial_visible_month=dt.datetime(2017, 10, 29),
-                            date=str(dt.datetime(2017, 10, 29)),
-                            className="pl-3",
-                        ),
+                        html.H3("Forecast as of "+str(dt.datetime.today().strftime("%b %d, %Y %H:%M"))),
                     ],
                     className="p-2",
+                ),
+                dbc.Row(
+                    [
+                        dbc.Col([
+                            html.Div([
+                            html.H4("Forecast Hours:"),],style={'width':'auto'}),
+                            html.Div([
+                                html.A("Note increased fetch time for more hours.")
+                            ],style={'fontSize':9,'width':'auto'})
+                        ],style={},width='auto'),
+                        dbc.Col([
+                            dbc.Row([
+                                dcc.RadioItems(
+                                    id="selected-hours1",
+                                    options=[{'label':'All (120)','value':0},
+                                             {'label':'Every 3','value':1},
+                                             {'label':'Every 6','value':2},
+                                             {'label':'Every 12','value':3},
+                                             {'label':'Custom','value':4},
+                                            ],
+                                    value=2,
+                                    labelStyle={'display': 'inline-block', 'paddingRight':'10px'}),
+                                dbc.Button("Fetch Data", id="hour-button", size='sm'),
+                            ],style={'marginLeft':5,'marginRight':5},justify='start'),    
+                            dbc.Row([
+                                html.Div([
+                                    dcc.Checklist(
+                                        id="selected-hours2",
+                                        options=[{'label':k+1,'value':k+1} for k in range(120)],
+                                        value=[1,10],
+                                        labelStyle={"vertical-align":"middle"},
+                                        style={"display":"inline-flex", 
+                                               "flex-wrap":"wrap", 
+                                               "justify-content":"space-between"}
+                                    ),
+                                ],style={'marginLeft':5,'width':'50%',
+                                         'max-height':'100px','overflow':'scroll'})
+                            ],style={},justify='center'),  
+                        ],style={},align='left'),
+                    ],style={'width':'100%'},
                 ),
                 # dbc.Progress(id="progress",value="0",animated=True),
                 dcc.Loading(
@@ -174,59 +214,50 @@ app.title = "ConEd WindView"
 server = app.server
 
 # Define callback functions
-# @app.callback(
-#     [Output("wind-data", "data"), Output("fdate", "marks")],
-#     [Input("selected-date", "date")],
-#     [State("wind-data", "data")],
-# )
-def load_data(date, data):
+@app.callback(
+    [Output("wind-data", "data"), Output("fdate", "marks")],
+    [Input("hour-button", "n_clicks")],
+    [State("selected-hours1","value")],
+    [State("wind-data", "data")],
+)
+def load_data(click, hours, data):
 
-    print("Loading Data for {0}".format(str(date)))
-    flist = glob.glob("./netcdf/wrfout_d01*")
-    U10 = []
-    V10 = []
-    for f in sorted(flist):
-        df = nc.Dataset(f)
-        U10.append(wrf.getvar(df, "U10"))
-        V10.append(wrf.getvar(df, "V10"))
+    print("Loading Data",click,hours)
+    hour_button_click = click
+    response = requests.get("http://169.226.181.187:7006/")
+    res = response.json()
+    with open(res['filename'],'r') as f:
+        json_data = json.load(f)
 
-    V10 = xr.concat(V10, "Time")
-    U10 = xr.concat(U10, "Time")
-    mag = np.sqrt(U10 ** 2 + V10 ** 2) * 2.23694
-    mag.name = "speed"
+        return (
+            json_data['gust'],
+            json_data['marks']
+        )
+    
+@app.callback(Output('selected-hours2', 'labelStyle'),
+              Input('selected-hours1', 'value'))
+def forecast_hours(value):
+    if value == 4:
+        return {'display':'inline-block'}
+    else: return {'display':'none'}
 
-    # Modify for plotting
-    mag["south_north"] = mag.XLAT.values[:, 0]
-    mag["west_east"] = mag.XLONG.values[0, :]
-    print("data loaded")
-
-    marks = {
-        k: pd.to_datetime(mag.Time.values[k]).strftime("%m/%d %H:%M")
-        for k in range(0, len(mag.Time), 8)
-    }
-    return (
-        mag.sel(
-            south_north=slice(40.06, 42.47), west_east=slice(-75.2, -71.84)
-        ).to_dict(),
-        marks,
-    )
-
-
-# @app.callback(
-#     Output("line-plot", "figure"),
-#     [
-#         Input("wind-data", "data"),
-#         Input("geoanimation", "selectedData"),
-#         Input("button", "n_clicks"),
-#     ],
-#     [State("fdate", "value")],
-# )
+@app.callback(
+    Output("line-plot", "figure"),
+    [
+        Input("wind-data", "data"),
+        Input("geoanimation", "selectedData"),
+        Input("button", "n_clicks"),
+    ],
+    [State("fdate", "value")],
+)
 def plot_line(data, points, n, dateind):
+#     print(data,points,n,dateind)
 
     if points and data and dateind:
         # print(points['range']['mapbox'][1][1],points['range']['mapbox'][0][1])
         # print(points['range']['mapbox'][0][0],points['range']['mapbox'][1][0])
-
+#         print(dateind[0],dateind[-1])
+        
         df = (
             xr.DataArray.from_dict(data)
             .isel(Time=slice(dateind[0], dateind[-1]))
@@ -240,10 +271,10 @@ def plot_line(data, points, n, dateind):
             )
             .max(["south_north", "west_east"])
         )
-
+#         print(df.Time.values)
         data = dict(
             type="scatter",
-            x=pd.to_datetime(df.Time.values).strftime("%m/%d %H:%M"),
+            x=df.Time.values,#pd.to_datetime(df.Time.values).strftime("%m/%d %H:%M"),
             y=df.values,
             line=dict(color="orange"),
         )
@@ -272,16 +303,16 @@ def plot_line(data, points, n, dateind):
         return dict(data=[], layout=layout)
 
 
-# @app.callback(
-#     Output("geoanimation", "figure"),
-#     [
+@app.callback(
+    Output("geoanimation", "figure"),
+    [
 #         Input("selected-date", "date"),
-#         Input("wind-data", "data"),
-#         Input("button", "n_clicks"),
-#     ],
-#     [State("fdate", "value"), State("geoanimation", "selectedData")],
-# )
-def plot_geo_animation(date, data, n, dateind, points):
+        Input("wind-data", "data"),
+        Input("button", "n_clicks"),
+    ],
+    [State("fdate", "value"), State("geoanimation", "selectedData")],
+)
+def plot_geo_animation(data, n, dateind, points):
 
     geo_layout = dict(
         mapbox=dict(
@@ -479,6 +510,5 @@ def rasterize(poly, lat_coord, long_coord, fill=np.nan, **kwargs):
         raster, coords=(lat_coord, long_coord), dims=("south_north", "west_east")
     )
 
-
-if __name__ == "__main__":
-    app.run_server(port=3000,debug=True)
+if __name__ == '__main__':
+    app.run_server(debug=True,port=3000,host='0.0.0.0')
