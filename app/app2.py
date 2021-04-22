@@ -112,7 +112,7 @@ body = dbc.Container(
                 dcc.Loading(
                     id="data-loading",
                     children=[dcc.Store(id="wind-data"),dcc.Store(id="geojson-data"),dcc.Store(id="geojson-annot")],
-                    fullscreen=True,
+#                     fullscreen=True,
                 ),
                 dbc.Row(
                     [
@@ -214,32 +214,47 @@ app.layout = html.Div([body])
 app.title = "ConEd WindView"
 server = app.server
 
+
+
+
+
 # Define callback functions
 @app.callback(
-    [Output("wind-data", "data"), Output("fdate", "marks"), 
-     Output("main-header","children"), Output("geojson-data","data"), Output("geojson-annot","data")],
-    [Input("hour-button", "n_clicks")],
-    [State("selected-hours","value"),State("wind-data", "data"),
-     State("geojson-data","data"),State("geojson-annot","data")
+    [
+#         Output("wind-data", "data"), Output("fdate", "marks"), 
+        Output("main-header","children"), Output("geojson-data","data"), Output("geojson-annot","data")
+    ],[
+        Input("hour-button", "n_clicks")
+    ],[
+        State("selected-hours","value"),State("wind-data", "data"),
+        State("geojson-data","data"),State("geojson-annot","data")
     ],
 )
 def load_data(click, hours, data, geojson, annot):
 
     print("Loading Data",click,hours)
     hour_button_click = click
-    response = requests.get("http://169.226.181.187:7006/")
+    response = requests.get("http://169.226.181.187:7006?hour="+str(hours))
     res = response.json()
-    with open(res['filename'],'r') as f:
-        json_data = json.load(f)
-#         print(json_data['geojson'])
+    
+    print(res['geojson'].keys())
+    return(
+        html.H3("Forecast as of "+str(pd.to_datetime(res['geojson']['time'],unit='s').strftime("%b %d, %Y %H:%M"))),
+        res['geojson']['geojson'][list(res['geojson']['geojson'].keys())[0]],
+        res['geojson']['data'][list(res['geojson']['data'].keys())[0]]
+    )
+    
+#     with open(res['filename'],'r') as f:
+#         json_data = json.load(f)
+#         print(list(json_data['geojson'].keys())[0])
 
-        return (
-            json_data['gust'],
-            json_data['marks'],
-            html.H3("Forecast as of "+str(pd.to_datetime(json_data['time'],unit='s').strftime("%b %d, %Y %H:%M"))),
-            json_data['geojson'],
-            json_data['data']
-        )
+#         return (
+# #             json_data['gust'],
+# #             json_data['marks'],
+#             html.H3("Forecast as of "+str(pd.to_datetime(json_data['time'],unit='s').strftime("%b %d, %Y %H:%M"))),
+#             json_data['geojson'][list(json_data['geojson'].keys())[0]],
+#             json_data['data'][list(json_data['geojson'].keys())[0]]
+#         )
     
 @app.callback(
     [
@@ -259,14 +274,16 @@ def forecast_hours(value):
 @app.callback(
     Output("line-plot", "figure"),
     [
-        Input("wind-data", "data"),
+#         Input("wind-data", "data"),
         Input("geoanimation", "selectedData"),
         Input("button", "n_clicks"),
     ],
     [State("fdate", "value")],
 )
-def plot_line(data, points, n, dateind):
-#     print(data,points,n,dateind)
+def plot_line(points, n, dateind):
+    print(points,n,dateind)
+    
+    
 
     if points and data and dateind:
         # print(points['range']['mapbox'][1][1],points['range']['mapbox'][0][1])
@@ -323,13 +340,15 @@ def plot_line(data, points, n, dateind):
     [
         Input("geojson-data", "data"),
         Input("geojson-annot","data"),
-        Input("wind-data", "data"),
+#         Input("wind-data", "data"),
         Input("button", "n_clicks"),
     ],
     [State("fdate", "value"), State("geoanimation", "selectedData")],
 )
-def plot_geo_animation(geo_layout, annot, data, n, dateind, points):
-    
+# def plot_geo_animation(geo_layout, annot, data, n, dateind, points):
+def plot_geo_animation(geo_layout, annot, n, dateind, points):
+
+
     
     
     # Set up Colors
@@ -351,7 +370,7 @@ def plot_geo_animation(geo_layout, annot, data, n, dateind, points):
 #         dragmode="select",
 #     )
 
-    if data and dateind:
+    if annot and dateind:
 #         # data to xarray
 #         df = (
 #             xr.DataArray.from_dict(data)

@@ -6,19 +6,31 @@ import xarray as xr
 import netCDF4 as nc
 import pandas as pd
 import numpy as np
+from datetime import datetime
+import threading
+import pickle as pkl
 
 ftp_host = 'ftp.gridpointweather.com'
 ftp_acct = 'wefs'
 ftp_pass = 'conED#18'
 
+mtimes = {}
+
+def setInterval(func,time):
+    e = threading.Event()
+    while not e.wait(time):
+        func()
+
 
 def grabFile(filename,ftp,directory):
-    localfile = open(directory+'/'+filename, 'wb')
-    ftp.retrbinary('RETR ' + filename, localfile.write, 1024)
-    localfile.close()
+    with open(directory+'/'+filename, 'wb') as localfile:
+        ftp.retrbinary('RETR ' + filename, localfile.write, 1024)
+#     localfile.close()
     
 def ftp_fetch():
+    print('fetching...',datetime.now())
     files = []
+    count = 0
     with FTP(ftp_host) as ftp:
         ftp.login(ftp_acct, ftp_pass) # connect to host, default port
         dirs = ftp.nlst()
@@ -27,13 +39,32 @@ def ftp_fetch():
             directory = 'netcdf/'+d
             if not os.path.exists(directory):os.makedirs(directory)
             ftp.cwd('../'+d)
-        #     ls = []
-        #     ftp.retrlines('LIST', ls.append)
-        #     for entry in ls:
-        #         print('e',entry)
+
+            ls = []
+            ftp.retrlines('LIST', ls.append)
+            for entry in ls:
+                m = int(datetime.strptime(entry.split()[5],'%b').strftime('%m'))
+                d = int(entry.split()[6])
+                h = int(entry.split()[7].split(':')[0])
+                mi = int(entry.split()[7].split(':')[1])
+                dt = datetime(datetime.now().year, m, d, h, mi)
+                
+                if entry.split()[-1] not in mtimes: mtimes[entry.split()[-1]] = {'time':dt,'update':True}
+                else:
+                    if dt!=mtimes[entry.split()[-1]]['time']:mtimes[entry.split()[-1]] = {'time':dt,'update':True}
+                    else:mtimes[entry.split()[-1]] = {'time':dt,'update':False}
+                        
+#                 print(entry.split()[-1],dt,mtimes[entry.split()[-1]]['time'])
             files=ftp.nlst()
-            for f in files: grabFile(f,ftp,directory)
+            
+            for f in files: 
+                if mtimes[f]['update']:
+                    count = count + 1
+                    grabFile(f,ftp,directory)
+        print(str(count)+' files have been updated')
         ftp.quit()
+#     if count>0: save_data_as_obj()
+    return count
         
         
 def get_geoJson(gust_sel):
@@ -52,24 +83,11 @@ def get_geoJson(gust_sel):
     CENTER_LONG=-73.723068
 
 
-    geo_layout = dict(
-        mapbox=dict(
-            accesstoken=mapbox_token,
-            center=dict(lon=CENTER_LONG, lat=CENTER_LAT),
-            zoom=ZOOM,
-            style="dark",
-            layers=[],
-        ),
-        plot_bgcolor="#303030",
-        paper_bgcolor="#303030",
-        margin=dict(l=0, r=0, t=0, b=0),
-        dragmode="select",
-    )
 
 
     df = (xr.DataArray.from_dict(gust_sel)
-          .max("Time")
-          .coarsen(south_north=3, west_east=3, boundary="pad")
+#           .max("Time")
+          .coarsen(south_north=6, west_east=6, boundary="pad")
           .max()
          )
 
@@ -101,79 +119,99 @@ def get_geoJson(gust_sel):
                 bgcolor="#EFEFEE",
             )
         )
-
-    geo_layout["annotations"] = annotations
-
-    # Get the max
-    x, y = np.meshgrid(df.west_east.values, df.south_north.values)
-    gridbox_cind = np.digitize(df.values, bins)
-
-    data = [
-        dict(
-            type="scattermapbox",
-            lon=x.flatten().tolist(),
-            lat=y.flatten().tolist(),
-            text=["{0:.1f} mph".format(i) for i in df.values.flatten()],
-            hoverinfo="text",
-            mode="none",
+    geo_layout = {}
+    data = {}
+    for i,tv in enumerate(df.Time.values):
+        
+        geo_layout[tv] = dict(
+            mapbox=dict(
+                accesstoken=mapbox_token,
+                center=dict(lon=CENTER_LONG, lat=CENTER_LAT),
+                zoom=ZOOM,
+                style="dark",
+                layers=[],
+            ),
+            plot_bgcolor="#303030",
+            paper_bgcolor="#303030",
+            margin=dict(l=0, r=0, t=0, b=0),
+            dragmode="select",
         )
-    ]
+        data[tv] = {}
+    for i,tv in enumerate(df.Time.values):
 
-    # set up geosjon
-    geoJSON = [
-        {"type": "FeatureCollection", "features": []} for i in range(len(colors))
-    ]
+        geo_layout[tv]["annotations"] = annotations
 
-    # each "color" is its own geojson layer for plotly. Loop of lat/lon and create gridboxes
-    for xi in range(0, df.shape[0] - 1):
-        for yi in range(0, df.shape[1] - 1):
-            colind = gridbox_cind[xi, yi] - 1
+        # Get the max
+        x, y = np.meshgrid(df[i].west_east.values, df[i].south_north.values)
+        gridbox_cind = np.digitize(df[i].values, bins)
 
-            geoJSON[colind]["features"].append(
-                {
-                    "type": "Feature",
-                    "properties": {},
-                    "geometry": {
-                        "type": "Polygon",
-                        "coordinates": [
-                            [
-                                [x[xi, yi], y[xi, yi]],
-                                [x[xi + 1, yi], y[xi + 1, yi]],
-                                [x[xi + 1, yi + 1], y[xi + 1, yi + 1]],
-                                [x[xi, yi + 1], y[xi, yi + 1]],
-                                [x[xi, yi], y[xi, yi]],
-                            ]
-                        ],
-                    },
-                }
+        data[tv] = [
+            dict(
+                type="scattermapbox",
+                lon=x.flatten().tolist(),
+                lat=y.flatten().tolist(),
+                text=["{0:.1f} mph".format(i) for i in df[i].values.flatten()],
+                hoverinfo="text",
+                mode="none",
             )
+        ]
 
-    for i in range(len(colors)):
-        geoLayer = dict(
-            sourcetype="geojson",
-            source=geoJSON[i],
-            type="fill",
-            color=mplcol.rgb2hex(colors[i]),
-            opacity=0.4,
-            name="{} mph".format(colors[i]),
-        )
-        geo_layout["mapbox"]["layers"].append(geoLayer)
+        # set up geosjon
+        geoJSON = [
+            {"type": "FeatureCollection", "features": []} for i in range(len(colors))
+        ]
+
+        # each "color" is its own geojson layer for plotly. Loop of lat/lon and create gridboxes
+        for xi in range(0, df[i].shape[0] - 1):
+            for yi in range(0, df[i].shape[1] - 1):
+                colind = gridbox_cind[xi, yi] - 1
+
+                geoJSON[colind]["features"].append(
+                    {
+                        "type": "Feature",
+                        "properties": {},
+                        "geometry": {
+                            "type": "Polygon",
+                            "coordinates": [
+                                [
+                                    [x[xi, yi], y[xi, yi]],
+                                    [x[xi + 1, yi], y[xi + 1, yi]],
+                                    [x[xi + 1, yi + 1], y[xi + 1, yi + 1]],
+                                    [x[xi, yi + 1], y[xi, yi + 1]],
+                                    [x[xi, yi], y[xi, yi]],
+                                ]
+                            ],
+                        },
+                    }
+                )
+
+        for i in range(len(colors)):
+            geoLayer = dict(
+                sourcetype="geojson",
+                source=geoJSON[i],
+                type="fill",
+                color=mplcol.rgb2hex(colors[i]),
+                opacity=0.4,
+                name="{} mph".format(colors[i]),
+            )
+            geo_layout[tv]["mapbox"]["layers"].append(geoLayer)
         
     return [geo_layout, data]
         
         
-        
 def save_data_as_obj():
-
-    flist = glob.glob('netcdf/gust/WEFS_max_gust*')
+    print('save data as obj...')
+    flist = sorted(glob.glob('netcdf/gust/WEFS_max_gust*'))
     gust = []
-    for f in flist[0:2]:
+    all_times = []
+    for f in flist:
         df = nc.Dataset(f)
     #     max_gust = wrf.getvar(df,'max_gust',meta=False)
     #     max_gust.append(df.variables['max_gust'][:].data)
         max_gust = df.variables['max_gust'][:].data
         latitude = df.variables['latitude'][:].data
         longitude = df.variables['longitude'][:].data
+        all_times.append(df.variables['time'][:].data[0])
 
         gust.append(xr.DataArray(
             data = max_gust,
@@ -191,7 +229,7 @@ def save_data_as_obj():
                 nlat= df.variables['max_gust'].nlat,
                 nlon= df.variables['max_gust'].nlon,
                 description= df.variables['max_gust'].description,
-                _FillValue= df.variables['max_gust']._FillValue
+#                 _FillValue= df.variables['max_gust']._FillValue
 
             ))
 
@@ -199,15 +237,15 @@ def save_data_as_obj():
 
 
     gust=xr.concat(gust,'Time')
-    gust['Time'] = [pd.to_datetime(gust[k].time+3600*(k+1),unit='s').strftime("%m/%d %H:%M")
+    gust['Time'] = [pd.to_datetime(all_times[k],unit='s').strftime("%m/%d %H:%M")
                     for k in range(len(gust.Time))]
 
 
     print("data loaded")
 
     marks = {
-        k: pd.to_datetime(gust[k].time+3600*(k+1),unit='s').strftime("%m/%d %H:%M")
-        for k in range(0, len(gust.Time), 8)
+        k: pd.to_datetime(all_times[k],unit='s').strftime("%m/%d %H:%M")
+        for k in range(0, len(gust.Time))
     }
 #     print(gust)
     gust_sel = gust.sel(south_north=slice(40.06, 42.47), west_east=slice(-75.2, -71.84)).to_dict()
@@ -217,19 +255,22 @@ def save_data_as_obj():
 
 
     with open('json/gust.json','w') as json_file:
-        json.dump({'gust':gust_sel,'marks':marks,'time':gust[0].time,'geojson':geojson[0],'data':geojson[1]},
-                  json_file)
+        json.dump({'gust':gust_sel},json_file)
+    with open('json/gust_geojson.json','w') as geojson_file:
+        json.dump({'geojson':geojson[0],'data':geojson[1],'time':gust[0].time,'marks':marks},geojson_file)
+#         pkl.dump({'geojson':geojson[0],'data':geojson[1],'time':min(all_times)-3600,'marks':marks},geojson_file)
     
-
-#     return (
-#         gust.sel(
-#             south_north=slice(40.06, 42.47), west_east=slice(-75.2, -71.84)
-#         ).to_dict(),
-#         marks
-#     )
+    print('complete')
+    
+def execute():
+    count = ftp_fetch()
+#     count = 1
+    if count>0: save_data_as_obj()
 
 if __name__ == '__main__':
-#     ftp_fetch()
-    save_data_as_obj()
+    execute()
+    setInterval(execute,60*30)
+#     print('test')
+    
 
     # print(files)
