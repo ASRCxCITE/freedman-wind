@@ -7,9 +7,18 @@ def setInterval(func,time):
         func()
 
         
-def ping_api():
-    response = requests.get("http://169.226.181.187:7006/ping")
-    print(response)
+def ping_geo():
+    response = requests.get("http://169.226.181.187:7006/ping_geo")
+    print(response.json())
     
-ping_api()
-setInterval(ping_api,60*30)
+def ping_gust():
+    response = requests.get("http://169.226.181.187:7006/ping_gust")
+    print(response.json())
+    
+    
+def execute():
+    ping_geo()
+    ping_gust()
+
+execute()
+setInterval(execute,60*30)

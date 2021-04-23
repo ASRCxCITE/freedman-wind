@@ -3,6 +3,8 @@ from flask import request, jsonify
 import os
 import json
 import pickle as pkl
+from datetime import datetime
+import copy
 
 app = flask.Flask(__name__)
 app.config["DEBUG"] = True
@@ -62,34 +64,38 @@ app.config["DEBUG"] = True
 #     return jsonify(results)
 
 geojson_data = {}
+gust_data = {}
     
     
-@app.route('/ping',methods=['GET'])
-def ping():
-    print('ping!')
+@app.route('/ping_geo',methods=['GET'])
+def ping_geo():
+    print('ping geo!',datetime.now())
     path = '/home/ksulia/WEFS/freedman-wind-master/app/json/gust_geojson.json'
     if os.path.exists(path):
         with open(path,'r') as f:
             data = json.load(f)
-#             data = pkl.load(f)
-            print('load')
-#             data['geojson']=data['geojson'][list(data['geojson'].keys())[0]]
-#             data['data']=data['data'][list(data['data'].keys())[0]]
-#             print(data.keys())
-        print('done')
-        
-#         data['geojson'][list(data['geojson'].keys())[0]],
-#         data['data'][list(data['data'].keys())[0]]
-        
+        print('done geo!',datetime.now())
         global geojson_data
         geojson_data = data
-    return "success"
+    return {"status":"success geo","time":datetime.now()}
+
+@app.route('/ping_gust',methods=['GET'])
+def ping_gust():
+    print('ping gust!',datetime.now())
+    path = '/home/ksulia/WEFS/freedman-wind-master/app/json/gust.json'
+    if os.path.exists(path):
+        with open(path,'r') as f:
+            data = json.load(f)
+        print('done gust!',datetime.now())
+        global gust_data
+        gust_data = data
+    return {"status":"success gust","time":datetime.now()}
 
 
 @app.route('/',methods=['GET'])
-def example():
-    print(request.args.get('hour'),geojson_data.keys())
-    if len(geojson_data.keys())==0:ping()
+def geo():
+    print('geo',geojson_data.keys(),request.args.get('hour'),geojson_data.keys())
+    if len(geojson_data.keys())==0:ping_geo()
     
     hour_req = request.args.get('hour')
     step = 6
@@ -105,11 +111,38 @@ def example():
     data_temp = {
         'data':{k: geojson_data['data'][k] for k in keys_list_subset[0:1]},
         'geojson':{k: geojson_data['geojson'][k] for k in keys_list_subset[0:1]},
-        'marks':geojson_data['marks'],
+        'marks':[geojson_data['marks'][k] for k in range(0,len(geojson_data['marks']),step)],
         'time':geojson_data['time']
     }
     print('returning...')
     return {'geojson':data_temp}
+
+@app.route('/gust',methods=['GET'])
+def gust():
+    if len(gust_data.keys())==0:ping_gust()
+    print('gust data req',request.args.get('hour'),gust_data.keys(),len(gust_data['gust']['data']))
+    
+    hour_req = request.args.get('hour')
+    step = 6
+    if hour_req == 0: step = 1
+    elif hour_req == 1: step = 3
+    elif hour_req == 2: step = 6   
+    elif hour_req == 3: step = 12
+        
+    gust_data_temp = copy.deepcopy(gust_data) # dont overwrite a global variable that you want to keep using!!
+    time_data = gust_data_temp['gust']['coords']['Time']['data']  
+    gust_data_temp['gust']['coords']['Time']['data'] = [time_data[k] for k in range(0,len(time_data),step)]
+
+    data_temp = {
+        'dims':gust_data_temp['gust']['dims'],
+        'attrs':gust_data_temp['gust']['attrs'],
+        'data':[gust_data_temp['gust']['data'][k] for k in range(0,len(gust_data_temp['gust']['data']),step)],
+        'coords':gust_data_temp['gust']['coords'],
+        'name':gust_data_temp['gust']['name']
+    }
+    
+    print('returning...')
+    return {'gust':data_temp}
     
     
     
