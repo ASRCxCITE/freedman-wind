@@ -70,25 +70,27 @@ gust_data = {}
 @app.route('/ping_geo',methods=['GET'])
 def ping_geo():
     print('ping geo!',datetime.now())
+    global geojson_data
+    geojson_data = {}
     path = '/home/ksulia/WEFS/freedman-wind-master/app/json/gust_geojson.json'
     if os.path.exists(path):
         with open(path,'r') as f:
             data = json.load(f)
-        print('done geo!',datetime.now())
-        global geojson_data
         geojson_data = data
+        print('done geo!',datetime.now())
     return {"status":"success geo","time":datetime.now()}
 
 @app.route('/ping_gust',methods=['GET'])
 def ping_gust():
     print('ping gust!',datetime.now())
+    global gust_data
+    gust_data = {}
     path = '/home/ksulia/WEFS/freedman-wind-master/app/json/gust.json'
     if os.path.exists(path):
         with open(path,'r') as f:
             data = json.load(f)
-        print('done gust!',datetime.now())
-        global gust_data
         gust_data = data
+        print('done gust!',datetime.now())    
     return {"status":"success gust","time":datetime.now()}
 
 
@@ -99,38 +101,45 @@ def geo():
     
     hour_req = request.args.get('hour')
     step = 6
-    if hour_req == 0: step = 1
-    elif hour_req == 1: step = 3
-    elif hour_req == 2: step = 6   
-    elif hour_req == 3: step = 12
+    if hour_req == '0': step = 1
+    elif hour_req == '1': step = 3
+    elif hour_req == '2': step = 6   
+    elif hour_req == '3': step = 12
 
     keys_list = list(geojson_data['geojson'].keys())
     keys_list_subset = [keys_list[i] for i in range(0,len(keys_list),step)]
-    print(keys_list_subset)
+    print('geo subset', keys_list_subset,geojson_data['marks']['0'],[k for k in range(0,len(geojson_data['marks']),step)])
+    mark_obj={}
+    for k in range(0,len(geojson_data['marks']),step):
+        mark_obj[k] = {'label':geojson_data['marks'][str(k)],
+                       'style':{'writing-mode':'vertical-rl','transform':'rotate(-60deg)','transform-origin':'center center'}}
         
     data_temp = {
-        'data':{k: geojson_data['data'][k] for k in keys_list_subset[0:1]},
-        'geojson':{k: geojson_data['geojson'][k] for k in keys_list_subset[0:1]},
-        'marks':[geojson_data['marks'][k] for k in range(0,len(geojson_data['marks']),step)],
+        'data':{k: geojson_data['data'][k] for k in keys_list_subset},
+        'geojson':{k: geojson_data['geojson'][k] for k in keys_list_subset},
+        'marks':mark_obj,
         'time':geojson_data['time']
     }
-    print('returning...')
+    print('returning geo...') 
     return {'geojson':data_temp}
 
 @app.route('/gust',methods=['GET'])
 def gust():
     if len(gust_data.keys())==0:ping_gust()
-    print('gust data req',request.args.get('hour'),gust_data.keys(),len(gust_data['gust']['data']))
+    print('gust data req',request.args.get('hour'),type(request.args.get('hour')),gust_data.keys(),len(gust_data['gust']['data']))
     
     hour_req = request.args.get('hour')
     step = 6
-    if hour_req == 0: step = 1
-    elif hour_req == 1: step = 3
-    elif hour_req == 2: step = 6   
-    elif hour_req == 3: step = 12
+    if hour_req == '0': step = 1
+    elif hour_req == '1': step = 3
+    elif hour_req == '2': step = 6   
+    elif hour_req == '3': step = 12
+        
+#     print('step',step)
         
     gust_data_temp = copy.deepcopy(gust_data) # dont overwrite a global variable that you want to keep using!!
     time_data = gust_data_temp['gust']['coords']['Time']['data']  
+#     print([time_data[k] for k in range(0,len(time_data),step)])
     gust_data_temp['gust']['coords']['Time']['data'] = [time_data[k] for k in range(0,len(time_data),step)]
 
     data_temp = {
@@ -141,7 +150,7 @@ def gust():
         'name':gust_data_temp['gust']['name']
     }
     
-    print('returning...')
+    print('returning gust...')
     return {'gust':data_temp}
     
     

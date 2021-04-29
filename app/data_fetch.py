@@ -202,38 +202,41 @@ def get_geoJson(gust_sel):
 def save_data_as_obj():
     print('save data as obj...')
     flist = sorted(glob.glob('netcdf/gust/WEFS_max_gust*'))
+#     print(flist)
     gust = []
     all_times = []
     for f in flist:
-        df = nc.Dataset(f)
-    #     max_gust = wrf.getvar(df,'max_gust',meta=False)
-    #     max_gust.append(df.variables['max_gust'][:].data)
-        max_gust = df.variables['max_gust'][:].data
-        latitude = df.variables['latitude'][:].data
-        longitude = df.variables['longitude'][:].data
-        all_times.append(df.variables['time'][:].data[0])
+        try:
+            df = nc.Dataset(f)
+        #     max_gust = wrf.getvar(df,'max_gust',meta=False)
+        #     max_gust.append(df.variables['max_gust'][:].data)
+            max_gust = df.variables['max_gust'][:].data
+            latitude = df.variables['latitude'][:].data
+            longitude = df.variables['longitude'][:].data
+            all_times.append(df.variables['time'][:].data[0])
 
-        gust.append(xr.DataArray(
-            data = max_gust,
-            dims = ["south_north","west_east"],
-            coords=dict(
-                south_north = (["south_north"],latitude),
-                west_east = (["west_east"],longitude)
-            ),
-            attrs=dict(
-                units= df.variables['max_gust'].units,
-                level= df.variables['max_gust'].level,
-                long_name= df.variables['max_gust'].long_name,
-                short_name= df.variables['max_gust'].short_name,
-                time= df.variables['max_gust'].time,
-                nlat= df.variables['max_gust'].nlat,
-                nlon= df.variables['max_gust'].nlon,
-                description= df.variables['max_gust'].description,
-#                 _FillValue= df.variables['max_gust']._FillValue
+            gust.append(xr.DataArray(
+                data = max_gust,
+                dims = ["south_north","west_east"],
+                coords=dict(
+                    south_north = (["south_north"],latitude),
+                    west_east = (["west_east"],longitude)
+                ),
+                attrs=dict(
+                    units= df.variables['max_gust'].units,
+                    level= df.variables['max_gust'].level,
+                    long_name= df.variables['max_gust'].long_name,
+                    short_name= df.variables['max_gust'].short_name,
+                    time= df.variables['max_gust'].time,
+                    nlat= df.variables['max_gust'].nlat,
+                    nlon= df.variables['max_gust'].nlon,
+                    description= df.variables['max_gust'].description,
+    #                 _FillValue= df.variables['max_gust']._FillValue
 
-            ))
+                ))
 
-        )
+            )
+        except:print("Error with file ", f)
 
 
     gust=xr.concat(gust,'Time')

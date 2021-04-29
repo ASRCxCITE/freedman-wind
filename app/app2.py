@@ -63,7 +63,10 @@ body = dbc.Container(
             [
                 dbc.Row(
                     [
-                        html.H3(id="main-header",children=["init"]),
+                        dcc.Loading(id="main-header-loading",
+                                    children=[html.H3(id="main-header",children=[])],
+                                    fullscreen=True
+                                   )
 #                         html.H3("Forecast as of "+str(dt.datetime.today().strftime("%b %d, %Y %H:%M"))),
                     ],
                     className="p-2",
@@ -85,7 +88,7 @@ body = dbc.Container(
                                              {'label':'Every 3','value':1},
                                              {'label':'Every 6','value':2},
                                              {'label':'Every 12','value':3},
-                                             {'label':'Custom','value':4},
+#                                              {'label':'Custom','value':4},
                                             ],
                                     value=2,
                                     labelStyle={'display': 'inline-block', 'paddingRight':'10px'}),
@@ -111,9 +114,16 @@ body = dbc.Container(
                 # dbc.Progress(id="progress",value="0",animated=True),
                 dcc.Loading(
                     id="data-loading",
-                    children=[dcc.Store(id="wind-data"),dcc.Store(id="geojson-data"),dcc.Store(id="geojson-annot")],
+                    children=[dcc.Store(id="geojson-data"),dcc.Store(id="geojson-annot")],
+#                     children=[dcc.Store(id="wind-data"),dcc.Store(id="geojson-data"),dcc.Store(id="geojson-annot")],
 #                     fullscreen=True,
                 ),
+#                 dcc.Loading(
+#                     id="wind-data-loading",
+# #                     children=[dcc.Store(id="geojson-data"),dcc.Store(id="geojson-annot")],
+#                     children=[dcc.Store(id="wind-data")],
+# #                     fullscreen=True,
+#                 ),
                 dbc.Row(
                     [
                         dbc.Col(
@@ -139,25 +149,27 @@ body = dbc.Container(
                             dcc.RangeSlider(
                                 id="fdate",
                                 min=0,
-                                max=73,
-                                step=1,
+                                max=13,
+                                step=None,
                                 allowCross=False,
-                                value=[0, 4],
+                                value=[0, 6],
                                 pushable=4,
                                 updatemode="mouseup",
                             ),
                             width=9,
+                            
                         ),
-                        dbc.Col(dbc.Button("Update Plot!", id="button")),
+#                         dbc.Col(dbc.Button("Update Plot!", id="button")),
                     ],
                     className="d-flex justify-content-center pt-4 w-100",
                 ),
                 dbc.Row(
                     [
                         dbc.Col(
-                            dcc.Loading(
-                                id="loading-animation",
-                                children=[
+#                             dcc.Loading(
+#                                 id="loading-animation",
+#                                 children=[
+                            [
                                     dcc.Graph(
                                         id="geoanimation",
                                         figure=dict(
@@ -174,14 +186,22 @@ body = dbc.Container(
                                                 margin=dict(l=0, r=0, t=0, b=0),
                                             )
                                         ),
-                                    )
+                                    ),
+                                    dbc.Row([
+                                        dbc.Button(" << ", id="button-prev", n_clicks=0),
+                                        dcc.Loading(id="map-time-loading",children=[html.H5(id="map-time",children=[])]),
+                                        dbc.Button(" >> ", id="button-next", n_clicks=0),
+                                    ],align='center',justify='center')
+                                    
                                 ],
-                            )
+#                             )
+                            
                         ),
                         dbc.Col(
-                            dcc.Loading(
+                            dbc.Container(
                                 id="loading-line",
                                 children=[
+                                    dcc.Store(id="wind-data"),
                                     dcc.Graph(
                                         id="line-plot",
                                         figure=dict(
@@ -222,39 +242,58 @@ server = app.server
 @app.callback(
     [
 #         Output("wind-data", "data"), Output("fdate", "marks"), 
-        Output("main-header","children"), Output("geojson-data","data"), Output("geojson-annot","data")
+        Output("main-header","children"), Output("geojson-data","data"), Output("geojson-annot","data"),
+        Output("fdate", "marks"),Output("fdate", "max")
     ],[
-        Input("hour-button", "n_clicks")
+        Input("hour-button","n_clicks")
     ],[
-        State("selected-hours","value"),State("wind-data", "data"),
+        State("selected-hours","value"),#State("wind-data", "data"),
         State("geojson-data","data"),State("geojson-annot","data")
     ],
 )
-def load_data(click, hours, data, geojson, annot):
+def load_data(click, hours, geojson, annot):
+# def load_data(click, hours, data, geojson, annot):
 
     print("Loading Data",click,hours)
     hour_button_click = click
+    
+    print('request geo from app')
     response = requests.get("http://169.226.181.187:7006?hour="+str(hours))
     res = response.json()
+    print('geo request complete')
     
-    print(res['geojson'].keys())
+    print('keys',res['geojson']['geojson'].keys()) 
     return(
         html.H3("Forecast as of "+str(pd.to_datetime(res['geojson']['time'],unit='s').strftime("%b %d, %Y %H:%M"))),
-        res['geojson']['geojson'][list(res['geojson']['geojson'].keys())[0]],
-        res['geojson']['data'][list(res['geojson']['data'].keys())[0]]
+        res['geojson']['geojson'],#[list(res['geojson']['geojson'].keys())[0]],
+        res['geojson']['data'],#[list(res['geojson']['data'].keys())[0]],
+        res['geojson']['marks'],
+        int(list(res['geojson']['marks'].keys())[-1])
+        
     )
     
-#     with open(res['filename'],'r') as f:
-#         json_data = json.load(f)
-#         print(list(json_data['geojson'].keys())[0])
 
-#         return (
-# #             json_data['gust'],
-# #             json_data['marks'],
-#             html.H3("Forecast as of "+str(pd.to_datetime(json_data['time'],unit='s').strftime("%b %d, %Y %H:%M"))),
-#             json_data['geojson'][list(json_data['geojson'].keys())[0]],
-#             json_data['data'][list(json_data['geojson'].keys())[0]]
-#         )
+@app.callback(
+    [
+        Output("wind-data", "data")#, Output("fdate", "marks"), 
+#         Output("main-header","children"), Output("geojson-data","data"), Output("geojson-annot","data")
+    ],[
+        Input("hour-button", "n_clicks")
+    ],[
+        State("selected-hours","value"), State("wind-data","data")
+#         State("geojson-data","data"),State("geojson-annot","data")
+    ],
+)
+def load_gust_data(click, hours, data):
+
+    print('request gust from app')
+    response = requests.get("http://169.226.181.187:7006/gust?hour="+str(hours))
+    res = response.json()
+#     data = res['gust']
+    print('gust request complete')
+    return(
+        [res['gust']]
+    )
     
 @app.callback(
     [
@@ -274,31 +313,31 @@ def forecast_hours(value):
 @app.callback(
     Output("line-plot", "figure"),
     [
-#         Input("wind-data", "data"),
+        Input("wind-data", "data"),
         Input("geoanimation", "selectedData"),
-        Input("button", "n_clicks"),
-        Input("hour-button", "n_clicks")
+        Input("hour-button", "n_clicks"),
+        Input("fdate", "value"),
+        Input('selected-hours','value')
     ],
-    [State("fdate", "value")],
+#     [State('selected-hours','value')],
 )
-def plot_line(points, n, hours, dateind):
+def plot_line(data, points, hours, dateind, selectedHours):
     
-    response = requests.get("http://169.226.181.187:7006/gust?hour="+str(hours))
-    res = response.json()
-    print('plot line',points,n,dateind,res['gust'].keys())
-    data = res['gust']
-
+    print('plot line start',dateind,selectedHours)
     
+    step = 6
+    if selectedHours == 0: step = 1
+    elif selectedHours == 1: step = 3
+    elif selectedHours == 2: step = 6   
+    elif selectedHours == 3: step = 12
     
+    print('plot line',dateind[-1]/step,int(dateind[0]/step), int(dateind[-1]/step)+1)
 
     if points and data and dateind:
-        # print(points['range']['mapbox'][1][1],points['range']['mapbox'][0][1])
-        # print(points['range']['mapbox'][0][0],points['range']['mapbox'][1][0])
-#         print(dateind[0],dateind[-1])
         
         df = (
             xr.DataArray.from_dict(data)
-            .isel(Time=slice(dateind[0], dateind[-1]))
+            .isel(Time=slice(int(dateind[0]/step), int(dateind[-1]/step)+1))
             .sel(
                 south_north=slice(
                     points["range"]["mapbox"][1][1], points["range"]["mapbox"][0][1]
@@ -309,6 +348,7 @@ def plot_line(points, n, hours, dateind):
             )
             .max(["south_north", "west_east"])
         )
+        print('df complete')
 #         print(df.Time.values)
         data = dict(
             type="scatter",
@@ -342,18 +382,39 @@ def plot_line(points, n, hours, dateind):
 
 
 @app.callback(
-    Output("geoanimation", "figure"),
+    [Output("geoanimation", "figure"),Output('button-next','n_clicks'),Output('map-time','children')],
     [
         Input("geojson-data", "data"),
         Input("geojson-annot","data"),
-#         Input("wind-data", "data"),
-        Input("button", "n_clicks"),
+        Input("button-next", "n_clicks"),
+        Input("button-prev", "n_clicks"),
+        Input('selected-hours','value'),
+        Input("fdate", "value"),
     ],
-    [State("fdate", "value"), State("geoanimation", "selectedData")],
+    [State("geoanimation", "selectedData")],
 )
 # def plot_geo_animation(geo_layout, annot, data, n, dateind, points):
-def plot_geo_animation(geo_layout, annot, n, dateind, points):
+def plot_geo_animation(geo, annot1, forwardClicks, backClicks, selectedHours, dateind, points):
+    
+    step = 6
+    if selectedHours == 0: step = 1
+    elif selectedHours == 1: step = 3
+    elif selectedHours == 2: step = 6   
+    elif selectedHours == 3: step = 12
+        
+    print('before click',forwardClicks,dateind[-1]/step,len(dateind)-1)
+    
+    if(forwardClicks > dateind[-1]/step): forwardClicks = 0
+    forwardClicks = int(min(forwardClicks,dateind[-1]/step))
+    index = list(geo.keys())[forwardClicks]
 
+    print('clicks', forwardClicks, index)
+    
+    geo_layout = geo[index]
+    annot = annot1[index]
+    
+#     print(geo_layout[index])
+    
     if annot and dateind:
 
         if points:
@@ -406,9 +467,9 @@ def plot_geo_animation(geo_layout, annot, n, dateind, points):
             )
             
 
-        return dict(data=annot, layout=geo_layout)
+        return [dict(data=annot, layout=geo_layout),forwardClicks,index]
     else:
-        return dict(data=[], layout=geo_layout)
+        return [dict(data=[], layout=geo_layout),forwardClicks,index]
 
 
 # definte utility functions, could be placed in another script
