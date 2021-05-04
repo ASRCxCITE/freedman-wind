@@ -150,6 +150,7 @@ def get_geoJson(gust_sel):
                 type="scattermapbox",
                 lon=x.flatten().tolist(),
                 lat=y.flatten().tolist(),
+                values=[i for i in df[i].values.flatten()],
                 text=["{0:.1f} mph".format(i) for i in df[i].values.flatten()],
                 hoverinfo="text",
                 mode="none",

@@ -65,7 +65,7 @@ body = dbc.Container(
                     [
                         dcc.Loading(id="main-header-loading",
                                     children=[html.H3(id="main-header",children=[])],
-                                    fullscreen=True
+#                                     fullscreen=True
                                    )
 #                         html.H3("Forecast as of "+str(dt.datetime.today().strftime("%b %d, %Y %H:%M"))),
                     ],
@@ -114,7 +114,7 @@ body = dbc.Container(
                 # dbc.Progress(id="progress",value="0",animated=True),
                 dcc.Loading(
                     id="data-loading",
-                    children=[dcc.Store(id="geojson-data"),dcc.Store(id="geojson-annot")],
+                    children=[dcc.Store(id="geojson-data")],
 #                     children=[dcc.Store(id="wind-data"),dcc.Store(id="geojson-data"),dcc.Store(id="geojson-annot")],
 #                     fullscreen=True,
                 ),
@@ -170,6 +170,7 @@ body = dbc.Container(
 #                                 id="loading-animation",
 #                                 children=[
                             [
+#                                     dcc.Store(id="geojson-data"),
                                     dcc.Graph(
                                         id="geoanimation",
                                         figure=dict(
@@ -198,10 +199,10 @@ body = dbc.Container(
                             
                         ),
                         dbc.Col(
-                            dbc.Container(
+                            dcc.Loading(
                                 id="loading-line",
                                 children=[
-                                    dcc.Store(id="wind-data"),
+                                    dcc.Store(id="geojson-annot"),
                                     dcc.Graph(
                                         id="line-plot",
                                         figure=dict(
@@ -273,27 +274,27 @@ def load_data(click, hours, geojson, annot):
     )
     
 
-@app.callback(
-    [
-        Output("wind-data", "data")#, Output("fdate", "marks"), 
-#         Output("main-header","children"), Output("geojson-data","data"), Output("geojson-annot","data")
-    ],[
-        Input("hour-button", "n_clicks")
-    ],[
-        State("selected-hours","value"), State("wind-data","data")
-#         State("geojson-data","data"),State("geojson-annot","data")
-    ],
-)
-def load_gust_data(click, hours, data):
+# @app.callback(
+#     [
+#         Output("wind-data", "data")#, Output("fdate", "marks"), 
+# #         Output("main-header","children"), Output("geojson-data","data"), Output("geojson-annot","data")
+#     ],[
+#         Input("hour-button", "n_clicks")
+#     ],[
+#         State("selected-hours","value"), State("wind-data","data")
+# #         State("geojson-data","data"),State("geojson-annot","data")
+#     ],
+# )
+# def load_gust_data(click, hours, data):
 
-    print('request gust from app')
-    response = requests.get("http://169.226.181.187:7006/gust?hour="+str(hours))
-    res = response.json()
-#     data = res['gust']
-    print('gust request complete')
-    return(
-        [res['gust']]
-    )
+#     print('request gust from app')
+#     response = requests.get("http://169.226.181.187:7006/gust?hour="+str(hours))
+#     res = response.json()
+# #     data = res['gust']
+#     print('gust request complete')
+#     return(
+#         [res['gust']]
+#     )
     
 @app.callback(
     [
@@ -313,15 +314,16 @@ def forecast_hours(value):
 @app.callback(
     Output("line-plot", "figure"),
     [
-        Input("wind-data", "data"),
+#         Input("wind-data", "data"),
+        Input("geojson-annot","data"),
         Input("geoanimation", "selectedData"),
         Input("hour-button", "n_clicks"),
         Input("fdate", "value"),
-        Input('selected-hours','value')
+#         Input('selected-hours','value')
     ],
-#     [State('selected-hours','value')],
+    [State('selected-hours','value')],
 )
-def plot_line(data, points, hours, dateind, selectedHours):
+def plot_line(annot, points, hours, dateind, selectedHours):
     
     print('plot line start',dateind,selectedHours)
     
@@ -331,29 +333,29 @@ def plot_line(data, points, hours, dateind, selectedHours):
     elif selectedHours == 2: step = 6   
     elif selectedHours == 3: step = 12
     
-    print('plot line',dateind[-1]/step,int(dateind[0]/step), int(dateind[-1]/step)+1)
-
-    if points and data and dateind:
         
-        df = (
-            xr.DataArray.from_dict(data)
-            .isel(Time=slice(int(dateind[0]/step), int(dateind[-1]/step)+1))
-            .sel(
-                south_north=slice(
-                    points["range"]["mapbox"][1][1], points["range"]["mapbox"][0][1]
-                ),
-                west_east=slice(
-                    points["range"]["mapbox"][0][0], points["range"]["mapbox"][1][0]
-                ),
-            )
-            .max(["south_north", "west_east"])
-        )
-        print('df complete')
-#         print(df.Time.values)
+    if points and annot and dateind:
+        print('plot line',dateind[-1]/step,int(dateind[0]/step), 
+              int(dateind[-1]/step)+1,points["range"]["mapbox"][1][1], 
+              points["range"]["mapbox"][0][1],points["range"]["mapbox"][0][0], 
+              points["range"]["mapbox"][1][0])
+
+        keys = [list(annot.keys())[i] for i in range(int(dateind[0]/step), int(dateind[-1]/step)+1)]
+        max_wind = []
+        for k in keys:
+            valid_lat = [i for i,l in enumerate(annot[k][0]['lat']) 
+                         if (l>=points["range"]["mapbox"][1][1])and(l<=points["range"]["mapbox"][0][1])]
+            valid_lon = [i for i,l in enumerate(annot[k][0]['lon']) 
+                         if (l>=points["range"]["mapbox"][0][0])and(l<=points["range"]["mapbox"][1][0])]
+            lat_lon_intersect = np.intersect1d(valid_lat,valid_lon)
+            max_wind.append(max([annot[k][0]['values'][i] for i in lat_lon_intersect]))
+
         data = dict(
             type="scatter",
-            x=df.Time.values,#pd.to_datetime(df.Time.values).strftime("%m/%d %H:%M"),
-            y=df.values,
+            x=keys,
+            y=max_wind,
+#             x=df.Time.values,#pd.to_datetime(df.Time.values).strftime("%m/%d %H:%M"),
+#             y=df.values,
             line=dict(color="orange"),
         )
         layout = dict(
@@ -388,13 +390,13 @@ def plot_line(data, points, hours, dateind, selectedHours):
         Input("geojson-annot","data"),
         Input("button-next", "n_clicks"),
         Input("button-prev", "n_clicks"),
-        Input('selected-hours','value'),
+        Input("hour-button", "n_clicks"),
         Input("fdate", "value"),
     ],
-    [State("geoanimation", "selectedData")],
+    [State("geoanimation", "selectedData"),State('selected-hours','value')],
 )
 # def plot_geo_animation(geo_layout, annot, data, n, dateind, points):
-def plot_geo_animation(geo, annot1, forwardClicks, backClicks, selectedHours, dateind, points):
+def plot_geo_animation(geo, annot1, forwardClicks, backClicks, hourClicks, dateind, points, selectedHours):
     
     step = 6
     if selectedHours == 0: step = 1
