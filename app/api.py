@@ -105,10 +105,13 @@ def geo():
     elif hour_req == '1': step = 3
     elif hour_req == '2': step = 6   
     elif hour_req == '3': step = 12
+        
+#     print('here1')
 
     keys_list = list(geojson_data['geojson'].keys())
+#     print(list(geojson_data['geojson'].keys()),[geojson_data['geojson'].keys()])
     keys_list_subset = [keys_list[i] for i in range(0,len(keys_list),step)]
-    print('geo subset', keys_list_subset,geojson_data['marks']['0'],[k for k in range(0,len(geojson_data['marks']),step)])
+#     print('geo subset', keys_list_subset,geojson_data['marks']['0'],[k for k in range(0,len(geojson_data['marks']),step)])
     mark_obj={}
     for k in range(0,len(geojson_data['marks']),step):
         mark_obj[k] = {'label':geojson_data['marks'][str(k)],
@@ -122,6 +125,8 @@ def geo():
     }
     print('returning geo...') 
     return {'geojson':data_temp}
+#     return {"status":1}
+#     return jsonify(data_temp)
 
 @app.route('/gust',methods=['GET'])
 def gust():

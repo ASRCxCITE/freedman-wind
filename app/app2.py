@@ -171,22 +171,37 @@ body = dbc.Container(
 #                                 children=[
                             [
 #                                     dcc.Store(id="geojson-data"),
+#                                     dcc.Graph(
+#                                         id="geoanimation",
+#                                         figure=dict(
+#                                             layout=dict(
+#                                                 mapbox=dict(
+#                                                     accesstoken=mapbox_token,
+#                                                     center=dict(
+#                                                         lon=CENTER_LONG, lat=CENTER_LAT
+#                                                     ),
+#                                                     zoom=ZOOM,
+#                                                     style="dark",
+#                                                 ),
+#                                                 paper_bgcolor="#303030",
+#                                                 margin=dict(l=0, r=0, t=0, b=0),
+#                                             )
+#                                         ),
+#                                     ),
                                     dcc.Graph(
                                         id="geoanimation",
-                                        figure=dict(
-                                            layout=dict(
-                                                mapbox=dict(
-                                                    accesstoken=mapbox_token,
-                                                    center=dict(
-                                                        lon=CENTER_LONG, lat=CENTER_LAT
-                                                    ),
-                                                    zoom=ZOOM,
-                                                    style="dark",
-                                                ),
-                                                paper_bgcolor="#303030",
-                                                margin=dict(l=0, r=0, t=0, b=0),
-                                            )
-                                        ),
+                                        figure={
+                                            "layout":{
+                                                "mapbox":{
+                                                    "accesstoken":mapbox_token,
+                                                    "center":{"lon":CENTER_LONG, "lat":CENTER_LAT},
+                                                    "zoom":ZOOM,
+                                                    "style":"dark",
+                                                },
+                                                "paper_bgcolor":"#303030",
+                                                "margin":{"l":0, "r":0, "t":0, "b":0},
+                                            },
+                                        }
                                     ),
                                     dbc.Row([
                                         dbc.Button(" << ", id="button-prev", n_clicks=0),
@@ -205,16 +220,16 @@ body = dbc.Container(
                                     dcc.Store(id="geojson-annot"),
                                     dcc.Graph(
                                         id="line-plot",
-                                        figure=dict(
-                                            layout=dict(
-                                                title="Click on a Polygon",
-                                                paper_bgcolor="#303030",
-                                                plot_bgcolor="#4a4a4a",
-                                                font=dict(color="white"),
-                                                yaxis=dict(title="mph")
-                                                # margin=dict(t=30,b=40,l=20,r=20)
-                                            )
-                                        ),
+                                        figure={
+                                            "layout":{
+                                                "title":"Click on a Polygon",
+                                                "paper_bgcolor":"#303030",
+                                                "plot_bgcolor":"#4a4a4a",
+                                                "font":{"color":"white"},
+                                                "yaxis":{"title":"mph"}
+                                                # "margin"=dict(t=30,b=40,l=20,r=20)
+                                            }
+                                        },
                                     )
                                 ],
                             )
@@ -260,6 +275,7 @@ def load_data(click, hours, geojson, annot):
     
     print('request geo from app')
     response = requests.get("http://169.226.181.187:7006?hour="+str(hours))
+    print('response return')
     res = response.json()
     print('geo request complete')
     
@@ -350,37 +366,37 @@ def plot_line(annot, points, hours, dateind, selectedHours):
             lat_lon_intersect = np.intersect1d(valid_lat,valid_lon)
             max_wind.append(max([annot[k][0]['values'][i] for i in lat_lon_intersect]))
 
-        data = dict(
-            type="scatter",
-            x=keys,
-            y=max_wind,
+        data = {
+            "type":"scatter",
+            "x":keys,
+            "y":max_wind,
 #             x=df.Time.values,#pd.to_datetime(df.Time.values).strftime("%m/%d %H:%M"),
 #             y=df.values,
-            line=dict(color="orange"),
-        )
-        layout = dict(
-            hovermode="closest",
-            title="Maximum Wind Speed inside Box",
-            yaxis=dict(title="mph", nticks=9, range=[0, 80], gridcolor="#d3d3d3"),
-            xaxis=dict(nticks=10, gridcolor="#d3d3d3"),
-            paper_bgcolor="#303030",
-            plot_bgcolor="#4a4a4a",
-            font=dict(color="white"),
-        )
-        return dict(data=[data], layout=layout)
+            "line":{"color":"orange"},
+        }
+        layout = {
+            "hovermode":"closest",
+            "title":"Maximum Gust inside Box",
+            "yaxis":{"title":"mph", "nticks":9, "range":[0, 80], "gridcolor":"#d3d3d3"},
+            "xaxis":{"nticks":10, "gridcolor":"#d3d3d3"},
+            "paper_bgcolor":"#303030",
+            "plot_bgcolor":"#4a4a4a",
+            "font":{"color":"white"},
+        }
+        return {"data":[data], "layout":layout}
     else:
 
-        layout = dict(
-            hovermode="closest",
-            title="Average Wind Speed over Selected Box",
-            yaxis=dict(title="mph", nticks=9, range=[0, 80], gridcolor="#d3d3d3"),
-            xaxis=dict(nticks=10, gridcolor="#d3d3d3"),
-            paper_bgcolor="#303030",
-            plot_bgcolor="#4a4a4a",
-            font=dict(color="white"),
-        )
+        layout = {
+            "hovermode":"closest",
+            "title":"Maximum Gust inside Box",
+            "yaxis":{"title":"mph", "nticks":9, "range":[0, 80], "gridcolor":"#d3d3d3"},
+            "xaxis":{"nticks":10, "gridcolor":"#d3d3d3"},
+            "paper_bgcolor":"#303030",
+            "plot_bgcolor":"#4a4a4a",
+            "font":{"color":"white"},
+        }
 
-        return dict(data=[], layout=layout)
+        return {"data":[], "layout":layout}
 
 
 @app.callback(
@@ -457,21 +473,19 @@ def plot_geo_animation(geo, annot1, forwardClicks, backClicks, hourClicks, datei
                 ],
             }
             
-            geo_layout["mapbox"]["layers"].append(
-                dict(
-                    sourcetype="geojson",
-                    source=poly_box,
-                    type="line",
-                    opacity=1.0,
-                    line=dict(width=3, color="#ffffff", dash="dash"),
-                    layer="above",
-                )
-            )
+            geo_layout["mapbox"]["layers"].append({
+                "sourcetype":"geojson",
+                "source":poly_box,
+                "type":"line",
+                "opacity":1.0,
+                "line":{"width":3, "color":"#ffffff", "dash":"dash"},
+                "layer":"above",
+            })
             
 
-        return [dict(data=annot, layout=geo_layout),forwardClicks,index]
+        return [{"data":annot, "layout":geo_layout},forwardClicks,index]
     else:
-        return [dict(data=[], layout=geo_layout),forwardClicks,index]
+        return [{"data":[], "layout":geo_layout},forwardClicks,index]
 
 
 # definte utility functions, could be placed in another script
